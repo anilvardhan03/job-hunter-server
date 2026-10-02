@@ -1,0 +1,13 @@
+name = "job-hunter-server"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+ENVIRONMENT = "development"
+PORT = "3000"
+
+[env.production]
+name = "job-hunter-server-prod"
+[env.production.vars]
+ENVIRONMENT = "production"

@@ -86,12 +86,13 @@ job-hunter-server/
 
 | Category | Technology | Purpose |
 |:---|:---|:---|
-| **Runtime & Language** | Node.js (v20+), TypeScript (v5.4+) | Type-safe backend application |
-| **Framework** | Express.js | Lightweight HTTP routing |
-| **Database & ORM** | Neon PostgreSQL, Prisma ORM (v5.20) | Relational cloud database and schema migrations |
+| **Runtime & Edge** | Cloudflare Workers (V8 Isolates), Node.js (v20+) | Edge compute runtime with sub-50ms latency |
+| **Framework** | Hono | Ultra-fast, edge-optimized routing framework |
+| **Database & ORM** | Neon PostgreSQL, Prisma ORM (v5.20) | Serverless PostgreSQL with `@prisma/adapter-neon` |
+| **Connection Pooling** | `@neondatabase/serverless` | WebSocket connection pooler for edge isolates |
 | **Authentication** | `jsonwebtoken`, `bcryptjs` | JWT token issuance and secure password hashing |
-| **Development** | `tsx` | Instant TS execution and auto-reload watcher |
-| **Documentation** | OpenAPI 3.0.3, ReDoc UI | Standardized API reference |
+| **CLI & Deployment** | `wrangler` | Cloudflare Workers CLI for emulation and deployment |
+| **Documentation** | OpenAPI 3.0.3, ReDoc UI | Standardized API reference rendered at `/docs` |
 | **Spec Parser** | `yaml` | Parses OpenAPI YAML specification |
 
 ---
@@ -204,9 +205,10 @@ npm run secrets:push
 ## 📜 Available Scripts
 
 ```bash
-npm run dev               # Start server with live reload (tsx watch)
+npm run dev               # Start server with live reload on Node.js (tsx watch)
+npm run dev:edge          # Start local Cloudflare Workers edge runtime (wrangler dev)
+npm run deploy            # Deploy directly to Cloudflare Workers (wrangler deploy)
 npm run build             # Compile TypeScript to dist/ (tsc)
-npm start                 # Start compiled server with tsx
 npm run postman:sync      # Push apiDocumentation/redoc.yaml to Postman Cloud
 npm run secrets:push      # Push secrets to both Infisical 'dev' and 'prod'
 npm run secrets:push:dev  # Push .env.dev to Infisical 'dev'

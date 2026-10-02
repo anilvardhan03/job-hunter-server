@@ -1,6 +1,5 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { config } from "../config";
 import { Role } from "@prisma/client";
 
 export interface TokenPayload {
@@ -19,16 +18,16 @@ export async function comparePassword(password: string, hash: string): Promise<b
   return bcrypt.compare(password, hash);
 }
 
-export function generateToken(payload: TokenPayload): string {
-  return jwt.sign(payload, config.jwt.secret, {
-    expiresIn: config.jwt.expiresIn as any,
+export function generateToken(payload: TokenPayload, secret: string, expiresIn: string = "7d"): string {
+  return jwt.sign(payload, secret, {
+    expiresIn: expiresIn as any,
   });
 }
 
-export function verifyToken(token: string): TokenPayload | null {
+export function verifyToken(token: string, secret: string): TokenPayload | null {
   try {
-    return jwt.verify(token, config.jwt.secret) as TokenPayload;
-  } catch (error) {
+    return jwt.verify(token, secret) as TokenPayload;
+  } catch {
     return null;
   }
 }

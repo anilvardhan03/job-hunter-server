@@ -1,34 +1,32 @@
-import { Router, Response } from "express";
-import prisma from "../db";
+import { Hono } from "hono";
 import { hashPassword, comparePassword, generateToken } from "../utils/auth";
-import { authenticate, AuthenticatedRequest } from "../middleware/auth";
+import { authenticate } from "../middleware/auth";
+import { AppEnv } from "../types";
 
-const router = Router();
+const auth = new Hono<AppEnv>();
 
 // Register a new user
-router.post("/register", async (req, res): Promise<void> => {
+auth.post("/register", async (c) => {
   try {
-    const { email, password, name } = req.body;
+    const { email, password, name } = await c.req.json();
 
     if (!email || !password) {
-      res.status(400).json({ error: "Email and password are required" });
-      return;
+      return c.json({ error: "Email and password are required" }, 400);
     }
 
     if (typeof password !== "string" || password.length < 6) {
-      res.status(400).json({ error: "Password must be at least 6 characters long" });
-      return;
+      return c.json({ error: "Password must be at least 6 characters long" }, 400);
     }
 
-    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedEmail = String(email).trim().toLowerCase();
+    const prisma = c.get("prisma");
 
     const existingUser = await prisma.user.findUnique({
       where: { email: normalizedEmail },
     });
 
     if (existingUser) {
-      res.status(409).json({ error: "User with this email already exists" });
-      return;
+      return c.json({ error: "User with this email already exists" }, 409);
     }
 
     // If this is the very first user registered, automatically make them SUPERADMIN
@@ -53,56 +51,65 @@ router.post("/register", async (req, res): Promise<void> => {
       },
     });
 
-    const token = generateToken({
-      userId: user.id,
-      email: user.email,
-      role: user.role,
-    });
+    const token = generateToken(
+      {
+        userId: user.id,
+        email: user.email,
+        role: user.role,
+      },
+      c.env.JWT_SECRET,
+      c.env.JWT_EXPIRES_IN || "7d"
+    );
 
-    res.status(201).json({
-      message: "User registered successfully",
-      token,
-      user,
-    });
+    return c.json(
+      {
+        message: "User registered successfully",
+        token,
+        user,
+      },
+      201
+    );
   } catch (error: any) {
-    res.status(500).json({ error: error.message || "Failed to register user" });
+    return c.json({ error: error.message || "Failed to register user" }, 500);
   }
 });
 
 // Login
-router.post("/login", async (req, res): Promise<void> => {
+auth.post("/login", async (c) => {
   try {
-    const { email, password } = req.body;
+    const { email, password } = await c.req.json();
 
     if (!email || !password) {
-      res.status(400).json({ error: "Email and password are required" });
-      return;
+      return c.json({ error: "Email and password are required" }, 400);
     }
 
-    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedEmail = String(email).trim().toLowerCase();
+    const prisma = c.get("prisma");
 
     const user = await prisma.user.findUnique({
       where: { email: normalizedEmail },
     });
 
     if (!user) {
-      res.status(401).json({ error: "Invalid email or password" });
-      return;
+      return c.json({ error: "Invalid email or password" }, 401);
     }
 
     const isMatch = await comparePassword(password, user.password);
     if (!isMatch) {
-      res.status(401).json({ error: "Invalid email or password" });
-      return;
+      return c.json({ error: "Invalid email or password" }, 401);
     }
 
-    const token = generateToken({
-      userId: user.id,
-      email: user.email,
-      role: user.role,
-    });
+    const token = generateToken(
+      {
+        userId: user.id,
+        email: user.email,
+        role: user.role,
+      },
+      c.env.JWT_SECRET,
+      c.env.JWT_EXPIRES_IN || "7d"
+    );
 
-    res.json({
+    return c.json({
       message: "Login successful",
       token,
       user: {
@@ -114,15 +121,18 @@ router.post("/login", async (req, res): Promise<void> => {
       },
     });
   } catch (error: any) {
-    res.status(500).json({ error: error.message || "Failed to login" });
+    return c.json({ error: error.message || "Failed to login" }, 500);
   }
 });
 
 // Get current user profile
-router.get("/me", authenticate, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+auth.get("/me", authenticate, async (c) => {
   try {
+    const authUser = c.get("user");
+    const prisma = c.get("prisma");
+
     const user = await prisma.user.findUnique({
-      where: { id: req.user!.userId },
+      where: { id: authUser.id },
       select: {
         id: true,
         email: true,
@@ -134,14 +144,13 @@ router.get("/me", authenticate, async (req: AuthenticatedRequest, res: Response)
     });
 
     if (!user) {
-      res.status(404).json({ error: "User not found" });
-      return;
+      return c.json({ error: "User not found" }, 404);
     }
 
-    res.json({ user });
+    return c.json({ user });
   } catch (error: any) {
-    res.status(500).json({ error: error.message || "Failed to retrieve user profile" });
+    return c.json({ error: error.message || "Failed to retrieve user profile" }, 500);
   }
 });
 
-export default router;
+export default auth;

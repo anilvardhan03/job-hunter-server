@@ -1,65 +1,45 @@
-import { Request, Response, NextFunction } from "express";
-import { verifyToken, TokenPayload } from "../utils/auth";
-import prisma from "../db";
+import { Context, Next } from "hono";
+import { verifyToken } from "../utils/auth";
+import { AppEnv } from "../types";
 
-export interface AuthenticatedRequest extends Request {
-  user?: TokenPayload;
-}
-
-export async function authenticate(
-  req: AuthenticatedRequest,
-  res: Response,
-  next: NextFunction
-): Promise<void> {
-  const authHeader = req.headers.authorization;
+export async function authenticate(c: Context<AppEnv>, next: Next) {
+  const authHeader = c.req.header("authorization");
 
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    res.status(401).json({ error: "Authorization token required (Bearer <token>)" });
-    return;
+    return c.json({ error: "Authorization token required (Bearer <token>)" }, 401);
   }
 
   const token = authHeader.split(" ")[1];
-  const payload = verifyToken(token);
+  const payload = verifyToken(token, c.env.JWT_SECRET);
 
   if (!payload) {
-    res.status(401).json({ error: "Invalid or expired token" });
-    return;
+    return c.json({ error: "Invalid or expired token" }, 401);
   }
 
-  // Ensure user still exists in the database
+  const prisma = c.get("prisma");
   const user = await prisma.user.findUnique({
     where: { id: payload.userId },
     select: { id: true, email: true, role: true },
   });
 
   if (!user) {
-    res.status(401).json({ error: "User no longer exists" });
-    return;
+    return c.json({ error: "User no longer exists" }, 401);
   }
 
-  req.user = {
-    userId: user.id,
-    email: user.email,
-    role: user.role,
-  };
-
-  next();
+  c.set("user", user);
+  await next();
 }
 
-export function requireSuperAdmin(
-  req: AuthenticatedRequest,
-  res: Response,
-  next: NextFunction
-): void {
-  if (!req.user) {
-    res.status(401).json({ error: "Authentication required" });
-    return;
+export async function requireSuperAdmin(c: Context<AppEnv>, next: Next) {
+  const user = c.get("user");
+
+  if (!user) {
+    return c.json({ error: "Authentication required" }, 401);
   }
 
-  if (req.user.role !== "SUPERADMIN") {
-    res.status(403).json({ error: "Access denied. SUPERADMIN role required." });
-    return;
+  if (user.role !== "SUPERADMIN") {
+    return c.json({ error: "Access denied. SUPERADMIN role required." }, 403);
   }
 
-  next();
+  await next();
 }

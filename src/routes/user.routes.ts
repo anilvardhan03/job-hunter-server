@@ -1,18 +1,19 @@
-import { Router, Response } from "express";
-import prisma from "../db";
-import { authenticate, requireSuperAdmin, AuthenticatedRequest } from "../middleware/auth";
+import { Hono } from "hono";
+import { authenticate, requireSuperAdmin } from "../middleware/auth";
 import { Role } from "@prisma/client";
+import { AppEnv } from "../types";
 
-const router = Router();
+const users = new Hono<AppEnv>();
 
-// All routes in this router require SUPERADMIN role
-router.use(authenticate);
-router.use(requireSuperAdmin);
+// All routes require SUPERADMIN role
+users.use(authenticate);
+users.use(requireSuperAdmin);
 
 // 1. List all users
-router.get("/", async (_req: AuthenticatedRequest, res: Response): Promise<void> => {
+users.get("/", async (c) => {
   try {
-    const users = await prisma.user.findMany({
+    const prisma = c.get("prisma");
+    const userList = await prisma.user.findMany({
       select: {
         id: true,
         email: true,
@@ -24,44 +25,45 @@ router.get("/", async (_req: AuthenticatedRequest, res: Response): Promise<void>
       orderBy: { createdAt: "desc" },
     });
 
-    res.json({
-      total: users.length,
-      users,
+    return c.json({
+      total: userList.length,
+      users: userList,
     });
   } catch (error: any) {
-    res.status(500).json({ error: error.message || "Failed to fetch users" });
+    return c.json({ error: error.message || "Failed to fetch users" }, 500);
   }
 });
 
 // 2. Update user role (only SUPERADMIN or USER allowed)
-router.patch("/:id/role", async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+users.patch("/:id/role", async (c) => {
   try {
-    const { id } = req.params;
-    const { role } = req.body;
+    const id = c.req.param("id");
+    const { role } = await c.req.json();
+    const currentUser = c.get("user");
+    const prisma = c.get("prisma");
 
     if (!role || !Object.values(Role).includes(role)) {
-      res.status(400).json({
-        error: `Invalid role. Allowed roles are: ${Object.values(Role).join(", ")}`,
-      });
-      return;
+      return c.json(
+        { error: `Invalid role. Allowed roles are: ${Object.values(Role).join(", ")}` },
+        400
+      );
     }
 
     const existing = await prisma.user.findUnique({ where: { id } });
     if (!existing) {
-      res.status(404).json({ error: "User not found" });
-      return;
+      return c.json({ error: "User not found" }, 404);
     }
 
     // Prevent a superadmin from demoting themselves if they are the only superadmin
-    if (existing.id === req.user!.userId && role !== "SUPERADMIN") {
+    if (existing.id === currentUser.id && role !== "SUPERADMIN") {
       const superAdminCount = await prisma.user.count({
         where: { role: "SUPERADMIN" },
       });
       if (superAdminCount <= 1) {
-        res.status(400).json({
-          error: "Cannot demote yourself as the only remaining SUPERADMIN",
-        });
-        return;
+        return c.json(
+          { error: "Cannot demote yourself as the only remaining SUPERADMIN" },
+          400
+        );
       }
     }
 
@@ -77,37 +79,37 @@ router.patch("/:id/role", async (req: AuthenticatedRequest, res: Response): Prom
       },
     });
 
-    res.json({
+    return c.json({
       message: `User role updated to ${role}`,
       user: updated,
     });
   } catch (error: any) {
-    res.status(500).json({ error: error.message || "Failed to update role" });
+    return c.json({ error: error.message || "Failed to update role" }, 500);
   }
 });
 
 // 3. Delete a user
-router.delete("/:id", async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+users.delete("/:id", async (c) => {
   try {
-    const { id } = req.params;
+    const id = c.req.param("id");
+    const currentUser = c.get("user");
+    const prisma = c.get("prisma");
 
-    if (id === req.user!.userId) {
-      res.status(400).json({ error: "Cannot delete your own account" });
-      return;
+    if (id === currentUser.id) {
+      return c.json({ error: "Cannot delete your own account" }, 400);
     }
 
     const existing = await prisma.user.findUnique({ where: { id } });
     if (!existing) {
-      res.status(404).json({ error: "User not found" });
-      return;
+      return c.json({ error: "User not found" }, 404);
     }
 
     await prisma.user.delete({ where: { id } });
 
-    res.json({ message: `User ${existing.email} deleted successfully` });
+    return c.json({ message: `User ${existing.email} deleted successfully` });
   } catch (error: any) {
-    res.status(500).json({ error: error.message || "Failed to delete user" });
+    return c.json({ error: error.message || "Failed to delete user" }, 500);
   }
 });
 
-export default router;
+export default users;
