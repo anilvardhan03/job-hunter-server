@@ -97,6 +97,30 @@ components:
           example: SUPERADMIN
 
 paths:
+  /:
+    get:
+      tags:
+        - Server Health
+      summary: Root status check
+      description: Confirms the server is working and lists main endpoints
+      responses:
+        "200":
+          description: Server is working
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Job Hunter Server is working!
+                  status:
+                    type: string
+                    example: UP
+                  runtime:
+                    type: string
+                    example: cloudflare-workers
+
   /health:
     get:
       tags:

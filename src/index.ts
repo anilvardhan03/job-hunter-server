@@ -21,7 +21,23 @@ app.use("*", async (c, next) => {
   await next();
 });
 
-// 3. Health Check
+// 3. Root Endpoint
+app.get("/", (c) => {
+  return c.json({
+    message: "Job Hunter Server is working!",
+    status: "UP",
+    runtime: "cloudflare-workers",
+    environment: c.env.ENVIRONMENT || "development",
+    endpoints: {
+      health: "/health",
+      docs: "/docs",
+      auth: "/api/auth",
+      users: "/api/users",
+    },
+  });
+});
+
+// 4. Health Check
 const startTime = Date.now();
 app.get("/health", (c) => {
   return c.json({
