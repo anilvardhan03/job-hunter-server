@@ -35,7 +35,6 @@ const server = serve(
     console.log(`Health:    http://localhost:${info.port}/health`);
     console.log(`Docs:      http://localhost:${info.port}/docs`);
     console.log(`Postman:   Run 'npm run postman:sync' to update collection`);
-    console.log(`Infisical: Run 'npm run secrets:push' to sync secrets`);
   }
 );
 

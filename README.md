@@ -1,10 +1,10 @@
-# 🚀 Job Hunter Server
+# Job Hunter Server
 
 > A clean, production-ready REST API backend for the Job Hunter platform built with **Node.js, Express, TypeScript, Prisma ORM, and Neon PostgreSQL**.
 
 ---
 
-## 📋 Table of Contents
+## Table of Contents
 - [Project Overview](#-project-overview)
 - [Directory Structure](#-directory-structure)
 - [Key Features](#-key-features)
@@ -14,11 +14,12 @@
 - [Interactive API Documentation (ReDoc)](#-interactive-api-documentation-redoc)
 - [Automated Postman Cloud Sync](#-automated-postman-cloud-sync)
 - [API Reference](#-api-reference)
+- [Cloudflare Secrets Management](#-cloudflare-secrets-management)
 - [Available Scripts](#-available-scripts)
 
 ---
 
-## 🎯 Project Overview
+## Project Overview
 
 Job Hunter Server serves as the backend API for the Job Hunter tracking platform. It includes:
 - Role-Based Access Control (**`SUPERADMIN`** and **`USER`** roles).
@@ -29,7 +30,7 @@ Job Hunter Server serves as the backend API for the Job Hunter tracking platform
 
 ---
 
-## 📁 Directory Structure
+## Directory Structure
 
 ```
 job-hunter-server/
@@ -40,32 +41,33 @@ job-hunter-server/
 │   ├── migrations/
 │   │   └── 20261002000000_init_user_management/
 │   │       └── migration.sql  # Versioned SQL migration diff
-│   └── schema.prisma          # Prisma schema definition
+│   └── schema.prisma          # Prisma schema with driverAdapters preview
 ├── src/
 │   ├── config.ts              # Centralized environment configuration
-│   ├── db.ts                  # Prisma Client singleton
+│   ├── db.ts                  # Neon Serverless Prisma Client adapter
+│   ├── index.ts               # Cloudflare Workers root entry point (Hono)
 │   ├── middleware/
 │   │   └── auth.ts            # JWT authentication & SUPERADMIN authorization guards
 │   ├── routes/
 │   │   ├── auth.routes.ts     # Register, Login, Profile (/me)
-│   │   ├── docs.routes.ts     # ReDoc UI route (/docs)
+│   │   ├── docs.routes.ts     # Edge ReDoc UI route (/docs)
 │   │   └── user.routes.ts     # Admin user management (Role updates, Deletion)
-│   ├── scripts/
-│   │   └── syncSecrets.ts     # Infisical Cloud secret synchronization engine
 │   ├── utils/
 │   │   └── auth.ts            # Bcrypt hashing & JWT sign/verify utilities
-│   └── server.ts              # Express application bootstrap & route mounting
+│   └── server.ts              # Local Node.js server (@hono/node-server)
+├── .dev.vars                  # Wrangler edge secrets (git-ignored)
 ├── .env                       # Local secrets (strictly git-ignored)
 ├── .env.example               # Safe environment template for public repo
 ├── .gitignore                 # Secret shielding & build ignore rules
 ├── package.json               # Scripts & dependencies
 ├── tsconfig.json              # TypeScript compiler configuration
+├── wrangler.toml              # Cloudflare Workers configuration
 └── README.md                  # Project documentation
 ```
 
 ---
 
-## ✨ Key Features
+## Key Features
 
 ### 1. Role-Based User Management
 - **Two Roles Only**: `SUPERADMIN` and `USER`.
@@ -82,7 +84,7 @@ job-hunter-server/
 
 ---
 
-## 🛠 Tech Stack & Dependencies
+## Tech Stack & Dependencies
 
 | Category | Technology | Purpose |
 |:---|:---|:---|
@@ -97,7 +99,7 @@ job-hunter-server/
 
 ---
 
-## 🔒 Environment Setup & Security
+## Environment Setup & Security
 
 ### 1. Create `.env`
 Copy `.env.example` to `.env`:
@@ -119,18 +121,13 @@ JWT_EXPIRES_IN="7d"
 # Postman Cloud synchronization
 POSTMAN_API_KEY="PMAK-xxxxxxxxxxxxxxxxxxxxxxxx"
 POSTMAN_COLLECTION_UID="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-
-# Infisical Cloud Secrets Manager (Universal Auth)
-INFISICAL_PROJECT_ID="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-INFISICAL_CLIENT_ID="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-INFISICAL_CLIENT_SECRET="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 ```
 
 > **Security Note**: All environment files (`.env`, `.env.*`, `*.local`) are blocked in `.gitignore`. No credentials exist in the source code.
 
 ---
 
-## 🗄 Database & Migrations
+## Database & Migrations
 
 The database uses **versioned SQL migration files** instead of direct un-tracked pushes.
 
@@ -147,18 +144,18 @@ npm run prisma:generate
 
 ---
 
-## 📖 Interactive API Documentation (ReDoc)
+## Interactive API Documentation (ReDoc)
 
 Open your browser when the server is running:
 
-👉 **[http://localhost:3000/docs](http://localhost:3000/docs)** — Interactive ReDoc Documentation  
-👉 **[http://localhost:3000/docs/spec.yaml](http://localhost:3000/docs/spec.yaml)** — Raw YAML Specification  
+**[http://localhost:3000/docs](http://localhost:3000/docs)** — Interactive ReDoc Documentation  
+**[http://localhost:3000/docs/spec.yaml](http://localhost:3000/docs/spec.yaml)** — Raw YAML Specification  
 
 Whenever you update `apiDocumentation/redoc.yaml`, simply refresh your browser to view the changes.
 
 ---
 
-## 📬 Automated Postman Cloud Sync
+## Automated Postman Cloud Sync
 
 To push the latest specification to your Postman Cloud workspace:
 
@@ -176,43 +173,42 @@ npm run postman:sync
 
 ---
 
-## 🔐 Automated Infisical Secrets Sync
+## Cloudflare Secrets Management
 
-To push local environment variables securely to Infisical Cloud without exposing secrets in GitHub:
+For local development and Cloudflare production deployments:
 
+### 1. Local Development
+- Secrets are stored in `.dev.vars` (or `.env` for Node.js mode).
+- Both files are strictly ignored by Git (`.gitignore`).
+- When running `npm run dev:edge`, Wrangler automatically loads `.dev.vars` into `c.env`.
+
+### 2. Production Deployment (Cloudflare Dashboard / CLI)
+
+#### Option 1: Via Cloudflare Web Dashboard (Method C)
+1. Open the **[Cloudflare Dashboard](https://dash.cloudflare.com/)**.
+2. Navigate to **Workers & Pages** $\rightarrow$ select **`job-hunter-server`**.
+3. Go to **Settings** $\rightarrow$ **Variables and Secrets**.
+4. Click **Add** under *Variables and Secrets* for each key (`DATABASE_URL`, `JWT_SECRET`, `BREVO_API_KEY`, etc.).
+5. Check **Encrypt** for sensitive secrets to protect them.
+
+#### Option 2: Via Wrangler CLI
 ```bash
-# Push development secrets (.env.dev or .env) to Infisical 'dev'
-npm run secrets:push:dev
-
-# Push production secrets (.env.prod or .env) to Infisical 'prod'
-npm run secrets:push:prod
-
-# Sync both environments in one command
-npm run secrets:push
+# Add secrets interactively
+npx wrangler secret put DATABASE_URL
+npx wrangler secret put JWT_SECRET
+npx wrangler secret put BREVO_API_KEY
 ```
 
-### Environment File Mapping:
-- **`dev` Environment**: Reads [`.env.dev`](file:///e:/Projects/job-hunter-server/.env.dev) (falls back to `.env` if `.env.dev` is not found). Sets `NODE_ENV="development"`.
-- **`prod` Environment**: Reads [`.env.prod`](file:///e:/Projects/job-hunter-server/.env.prod) (falls back to `.env` if `.env.prod` is not found). Sets `NODE_ENV="production"`.
+---
 
-### How the Secrets Sync Engine Works (`src/scripts/syncSecrets.ts`):
-1. **Resolves Environment Files**: Automatically picks `.env.dev` for development and `.env.prod` for production.
-2. **Universal Auth**: Authenticates against Infisical Cloud (`https://app.infisical.com`) via Machine Identity Client ID & Client Secret to obtain an ephemeral access token.
-3. **Batch Raw API**: Calls `/api/v3/secrets/batch/raw` with target workspace ID and environment.
-4. **Auto-Upsert (POST & PATCH)**: Attempts creation (`POST`) and automatically falls back to update (`PATCH`) if the secrets already exist.
-5. **Render Production Sync**: In your Infisical project dashboard, go to **Integrations** $\rightarrow$ **Render** to deploy all synced secrets directly to your Render Web Service with one click.
-
-## 📜 Available Scripts
+## Available Scripts
 
 ```bash
-npm run dev               # Start server with live reload on Node.js (tsx watch)
+npm run dev               # Start local server on Node.js (tsx watch)
 npm run dev:edge          # Start local Cloudflare Workers edge runtime (wrangler dev)
-npm run deploy            # Deploy directly to Cloudflare Workers (wrangler deploy)
+npm run deploy            # Deploy worker directly to Cloudflare (wrangler deploy)
 npm run build             # Compile TypeScript to dist/ (tsc)
 npm run postman:sync      # Push apiDocumentation/redoc.yaml to Postman Cloud
-npm run secrets:push      # Push secrets to both Infisical 'dev' and 'prod'
-npm run secrets:push:dev  # Push .env.dev to Infisical 'dev'
-npm run secrets:push:prod # Push .env.prod to Infisical 'prod'
 npm run prisma:status     # Check migration status
 npm run prisma:diff       # Generate SQL migration diff from schema.prisma
 ```
