@@ -26,19 +26,25 @@ export function createRateLimiter(options: RateLimitOptions) {
   } = options;
 
   const storage = new Map<string, RateLimitRecord>();
+  let lastCleanup = Date.now();
 
-  // Cleanup stale records every 5 minutes
-  setInterval(() => {
-    const now = Date.now();
+  const performCleanup = (now: number) => {
     for (const [key, record] of storage.entries()) {
       record.timestamps = record.timestamps.filter((time) => now - time < windowMs);
       if (record.timestamps.length === 0) {
         storage.delete(key);
       }
     }
-  }, 5 * 60 * 1000);
+  };
 
   return async function rateLimiterMiddleware(c: Context<AppEnv>, next: Next) {
+    const now = Date.now();
+
+    // Lazy cleanup every 5 minutes without holding long-lived global timers
+    if (now - lastCleanup > 5 * 60 * 1000) {
+      performCleanup(now);
+      lastCleanup = now;
+    }
     // Extract client IP address
     const clientIp =
       c.req.header("cf-connecting-ip") ||
@@ -47,7 +53,6 @@ export function createRateLimiter(options: RateLimitOptions) {
       "unknown-ip";
 
     const key = `${clientIp}:${c.req.path}`;
-    const now = Date.now();
 
     let record = storage.get(key);
     if (!record) {

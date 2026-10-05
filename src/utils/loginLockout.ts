@@ -12,22 +12,19 @@ const LOCKOUT_DURATION_MS = 5 * 60 * 1000; // 5 minutes
 class LoginLockoutManager {
   private accountStore = new Map<string, LockoutRecord>();
   private ipStore = new Map<string, LockoutRecord>();
+  private lastCleanup = Date.now();
 
-  constructor() {
-    // Garbage collection every 10 minutes
-    setInterval(() => {
-      const now = Date.now();
-      for (const [key, record] of this.accountStore.entries()) {
-        if (record.lockedUntil && now > record.lockedUntil) {
-          this.accountStore.delete(key);
-        }
+  private cleanup(now: number) {
+    for (const [key, record] of this.accountStore.entries()) {
+      if (record.lockedUntil && now > record.lockedUntil) {
+        this.accountStore.delete(key);
       }
-      for (const [key, record] of this.ipStore.entries()) {
-        if (record.lockedUntil && now > record.lockedUntil) {
-          this.ipStore.delete(key);
-        }
+    }
+    for (const [key, record] of this.ipStore.entries()) {
+      if (record.lockedUntil && now > record.lockedUntil) {
+        this.ipStore.delete(key);
       }
-    }, 10 * 60 * 1000);
+    }
   }
 
   /**
@@ -35,6 +32,10 @@ class LoginLockoutManager {
    */
   assertNotLocked(email: string, clientIp: string): void {
     const now = Date.now();
+    if (now - this.lastCleanup > 10 * 60 * 1000) {
+      this.cleanup(now);
+      this.lastCleanup = now;
+    }
     const normalizedEmail = email.trim().toLowerCase();
 
     // 1. Check account-based lockout

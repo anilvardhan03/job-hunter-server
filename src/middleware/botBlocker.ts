@@ -114,12 +114,28 @@ export function isIpBanned(ip: string): boolean {
   return true;
 }
 
+let lastBansCleanup = Date.now();
+
+function cleanupExpiredBans(now: number) {
+  for (const [ip, entry] of bannedIps.entries()) {
+    if (now > entry.expiresAt) {
+      bannedIps.delete(ip);
+    }
+  }
+}
+
 /**
  * Firewall Middleware:
  * 1. Blocks currently banned IPs from accessing any endpoint.
  * 2. Catches bot probes on honeypot routes like /.env and instantly bans the offender IP.
  */
 export async function botAndProbeBlocker(c: Context<AppEnv>, next: Next) {
+  const now = Date.now();
+  if (now - lastBansCleanup > 10 * 60 * 1000) {
+    cleanupExpiredBans(now);
+    lastBansCleanup = now;
+  }
+
   const clientIp = getClientIp(c);
   const path = c.req.path;
 
@@ -142,15 +158,3 @@ export async function botAndProbeBlocker(c: Context<AppEnv>, next: Next) {
 
   await next();
 }
-
-/**
- * Periodic cleanup of expired bans every 10 minutes
- */
-setInterval(() => {
-  const now = Date.now();
-  for (const [ip, entry] of bannedIps.entries()) {
-    if (now > entry.expiresAt) {
-      bannedIps.delete(ip);
-    }
-  }
-}, 10 * 60 * 1000);

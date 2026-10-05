@@ -2,24 +2,32 @@ import dotenv from "dotenv";
 import fs from "fs";
 import path from "path";
 
-// Accept either .env or .env.dev for local development
-const candidateFiles = [
-  process.env.NODE_ENV ? `.env.${process.env.NODE_ENV}` : null,
-  ".env.dev",
-  ".env",
-].filter(Boolean) as string[];
+try {
+  if (typeof process !== "undefined" && typeof process.cwd === "function") {
+    // Accept either .env or .env.dev for local development
+    const candidateFiles = [
+      process.env.NODE_ENV ? `.env.${process.env.NODE_ENV}` : null,
+      ".env.dev",
+      ".env",
+    ].filter(Boolean) as string[];
 
-for (const file of candidateFiles) {
-  const fullPath = path.resolve(process.cwd(), file);
-  if (fs.existsSync(fullPath)) {
-    dotenv.config({ path: fullPath });
-    break;
+    for (const file of candidateFiles) {
+      const fullPath = path.resolve(process.cwd(), file);
+      if (fs.existsSync(fullPath)) {
+        dotenv.config({ path: fullPath });
+        break;
+      }
+    }
   }
+} catch {
+  // Ignored in Cloudflare Workers / serverless environments where fs is restricted
 }
 
-const jwtSecret = (process.env.JWT_SECRET || "").trim();
-if (!jwtSecret && process.env.NODE_ENV === "production") {
-  throw new Error("CRITICAL: JWT_SECRET environment variable is missing!");
+const jwtSecret = (typeof process !== "undefined" ? process.env?.JWT_SECRET || "" : "").trim();
+if (!jwtSecret && typeof process !== "undefined" && process.env?.NODE_ENV === "production" && !process.env?.CLOUDFLARE_WORKER) {
+  console.warn(
+    "[Config Warning] JWT_SECRET is not set in process.env. Ensure it is provided via Cloudflare Worker Secrets or environment variables."
+  );
 }
 
 export const config = {
