@@ -11,8 +11,8 @@
     "start": "tsx src/server.ts",
     "prisma:generate": "prisma generate",
     "prisma:status": "prisma migrate status",
-    "prisma:diff": "prisma migrate diff --from-schema-datasource prisma/schema.prisma --to-schema-datamodel prisma/schema.prisma --script",
-    "postman:sync": "tsx apiDocumentation/sync.ts"
+    "postman:sync": "tsx apiDocumentation/sync.ts",
+    "seed:users": "tsx src/scripts/seedUsers.ts"
   },
   "keywords": [
     "job-tracker",

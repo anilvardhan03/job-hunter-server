@@ -19,6 +19,21 @@ export interface AuthUser {
   id: string;
   email: string;
   role: Role;
+  deletedAt?: Date | null;
+}
+
+export interface UserRecord {
+  id: string;
+  email: string;
+  password: string;
+  name: string | null;
+  role: Role;
+  isVerified: boolean;
+  verificationToken?: string | null;
+  verificationExpires?: Date | null;
+  deletedAt?: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface Variables {

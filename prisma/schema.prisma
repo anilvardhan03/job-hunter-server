@@ -14,13 +14,19 @@ enum Role {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  password  String
-  name      String?
-  role      Role     @default(USER)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                  String    @id @default(cuid())
+  email               String    @unique
+  password            String
+  name                String?
+  role                Role      @default(USER)
+  isVerified          Boolean   @default(false)
+  verificationToken   String?   @unique
+  verificationExpires DateTime?
+  deletedAt           DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   @@index([email])
+  @@index([verificationToken])
+  @@index([deletedAt])
 }

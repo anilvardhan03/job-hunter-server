@@ -51,4 +51,10 @@ export const config = {
     apiKey: (process.env.POSTMAN_API_KEY || "").trim(),
     collectionUid: (process.env.POSTMAN_COLLECTION_UID || "").trim(),
   },
+  cors: {
+    allowedOrigins: (process.env.ALLOWED_ORIGINS || process.env.CORS_ORIGIN || "")
+      .split(",")
+      .map((o) => o.trim())
+      .filter(Boolean),
+  },
 };

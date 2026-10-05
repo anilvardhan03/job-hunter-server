@@ -7,8 +7,12 @@ info:
     name: Job Hunter Team
 
 servers:
-  - url: http://localhost:3000
+  - url: http://localhost:{port}
     description: Local development server
+    variables:
+      port:
+        default: "3000"
+        description: Server port configured dynamically from .env (PORT)
 
 tags:
   - name: Server Health
@@ -44,12 +48,52 @@ components:
           type: string
           enum: [SUPERADMIN, USER]
           example: USER
+        isVerified:
+          type: boolean
+          example: true
+        deletedAt:
+          type: string
+          format: date-time
+          nullable: true
+          example: null
         createdAt:
           type: string
           format: date-time
         updatedAt:
           type: string
           format: date-time
+    UpdateProfileInput:
+      type: object
+      properties:
+        name:
+          type: string
+          example: John Updated
+        password:
+          type: string
+          minLength: 6
+          example: NewSecretPassword123!
+    UpdateUserInput:
+      type: object
+      properties:
+        name:
+          type: string
+          example: Updated Name
+        email:
+          type: string
+          format: email
+          example: updated@jobhunter.local
+        role:
+          type: string
+          enum: [SUPERADMIN, USER]
+          example: USER
+        isVerified:
+          type: boolean
+          example: true
+        deletedAt:
+          type: string
+          format: date-time
+          nullable: true
+          example: null
     RegisterInput:
       type: object
       required:
@@ -89,6 +133,18 @@ components:
           type: string
           enum: [SUPERADMIN, USER]
           example: SUPERADMIN
+    ApiError:
+      type: object
+      properties:
+        statusCode:
+          type: integer
+          example: 409
+        error:
+          type: string
+          example: Conflict
+        message:
+          type: string
+          example: User with this email already exists
 
 paths:
   /:
@@ -113,7 +169,7 @@ paths:
                     example: UP
                   runtime:
                     type: string
-                    example: cloudflare-workers
+                    example: local
 
   /health:
     get:
@@ -147,7 +203,7 @@ paths:
       tags:
         - Authentication
       summary: Register new user
-      description: First registered user in database automatically receives SUPERADMIN role
+      description: Registers a new user with USER role and dispatches an email verification link
       requestBody:
         required: true
         content:
@@ -155,23 +211,69 @@ paths:
             schema:
               $ref: "#/components/schemas/RegisterInput"
             example:
-              email: admin@jobhunter.local
+              email: user@jobhunter.local
               password: Password123!
-              name: Super Admin
+              name: Test User
       responses:
         "201":
-          description: User registered successfully
+          description: User registered successfully (verification email sent)
         "400":
           description: Validation error
         "409":
           description: User already exists
+
+  /api/auth/verify-email:
+    get:
+      tags:
+        - Authentication
+      summary: Verify email address
+      description: Validates email verification token sent to user's inbox and activates account
+      parameters:
+        - name: token
+          in: query
+          required: true
+          description: Verification token received via email
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Email verified successfully
+        "400":
+          description: Invalid or expired verification token
+
+  /api/auth/resend-verification:
+    post:
+      tags:
+        - Authentication
+      summary: Resend verification email
+      description: Generates a new verification link and dispatches to user email
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: user@jobhunter.local
+      responses:
+        "200":
+          description: Verification email resent successfully
+        "400":
+          description: Validation error
+        "404":
+          description: User not found
 
   /api/auth/login:
     post:
       tags:
         - Authentication
       summary: Login user
-      description: Authenticates user credentials and returns JWT token
+      description: Authenticates user credentials and returns JWT token (requires verified email)
       requestBody:
         required: true
         content:
@@ -207,6 +309,42 @@ paths:
         "401":
           description: Unauthorized
 
+  /api/auth/profile:
+    put:
+      tags:
+        - Authentication
+      summary: Update current user profile
+      description: Allows authenticated user to update their name and/or password
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProfileInput"
+      responses:
+        "200":
+          description: Profile updated successfully
+        "400":
+          description: Validation error (e.g. password too short)
+        "401":
+          description: Unauthorized
+    delete:
+      tags:
+        - Authentication
+      summary: Request account deletion (Scheduled for 7 days)
+      description: Soft deletes user account, deactivates login, dispatches confirmation email, and schedules permanent deletion in 7 days
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Account deletion scheduled and confirmation email sent
+        "400":
+          description: Cannot delete sole remaining superadmin
+        "401":
+          description: Unauthorized
+
   /api/users:
     get:
       tags:
@@ -221,6 +359,57 @@ paths:
           description: Unauthorized
         "403":
           description: Forbidden - requires SUPERADMIN role
+
+  /api/users/{id}:
+    put:
+      tags:
+        - User Management
+      summary: Update user details (SUPERADMIN only)
+      description: Superadmin updates user name, email, role, verification status, or soft-deletion
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: target_user_id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateUserInput"
+      responses:
+        "200":
+          description: User updated successfully
+        "400":
+          description: Invalid parameters or cannot demote sole superadmin
+        "404":
+          description: User not found
+        "409":
+          description: Email already in use
+    delete:
+      tags:
+        - User Management
+      summary: Delete user (SUPERADMIN only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: target_user_id
+      responses:
+        "200":
+          description: User deleted successfully
+        "400":
+          description: Cannot delete own account
+        "404":
+          description: User not found
 
   /api/users/{id}/role:
     patch:
@@ -252,24 +441,19 @@ paths:
         "404":
           description: User not found
 
-  /api/users/{id}:
-    delete:
+  /api/users/purge-deleted:
+    post:
       tags:
         - User Management
-      summary: Delete user (SUPERADMIN only)
+      summary: Purge expired deleted accounts (SUPERADMIN only)
+      description: Manually triggers hard deletion of accounts that have been soft-deleted for more than 7 days (1 week)
       security:
         - bearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-          example: target_user_id
       responses:
         "200":
-          description: User deleted successfully
-        "400":
-          description: Cannot delete own account
-        "404":
-          description: User not found
+          description: Successfully purged expired accounts
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden - requires SUPERADMIN role
+

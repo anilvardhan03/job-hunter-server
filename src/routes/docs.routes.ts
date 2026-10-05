@@ -12,9 +12,6 @@ info:
   contact:
     name: Job Hunter Team
 
-servers:
-  - url: http://localhost:3000
-    description: Local development server
 
 tags:
   - name: Server Health
@@ -50,6 +47,9 @@ components:
           type: string
           enum: [SUPERADMIN, USER]
           example: USER
+        isVerified:
+          type: boolean
+          example: true
         createdAt:
           type: string
           format: date-time
@@ -95,6 +95,18 @@ components:
           type: string
           enum: [SUPERADMIN, USER]
           example: SUPERADMIN
+    ApiError:
+      type: object
+      properties:
+        statusCode:
+          type: integer
+          example: 409
+        error:
+          type: string
+          example: Conflict
+        message:
+          type: string
+          example: User with this email already exists
 
 paths:
   /:
@@ -153,7 +165,7 @@ paths:
       tags:
         - Authentication
       summary: Register new user
-      description: First registered user in database automatically receives SUPERADMIN role
+      description: Registers a new user with USER role and dispatches an email verification link
       requestBody:
         required: true
         content:
@@ -161,23 +173,69 @@ paths:
             schema:
               $ref: "#/components/schemas/RegisterInput"
             example:
-              email: admin@jobhunter.local
+              email: user@jobhunter.local
               password: Password123!
-              name: Super Admin
+              name: Test User
       responses:
         "201":
-          description: User registered successfully
+          description: User registered successfully (verification email sent)
         "400":
           description: Validation error
         "409":
           description: User already exists
+
+  /api/auth/verify-email:
+    get:
+      tags:
+        - Authentication
+      summary: Verify email address
+      description: Validates email verification token sent to user's inbox and activates account
+      parameters:
+        - name: token
+          in: query
+          required: true
+          description: Verification token received via email
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Email verified successfully
+        "400":
+          description: Invalid or expired verification token
+
+  /api/auth/resend-verification:
+    post:
+      tags:
+        - Authentication
+      summary: Resend verification email
+      description: Generates a new verification link and dispatches to user email
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: user@jobhunter.local
+      responses:
+        "200":
+          description: Verification email resent successfully
+        "400":
+          description: Validation error
+        "404":
+          description: User not found
 
   /api/auth/login:
     post:
       tags:
         - Authentication
       summary: Login user
-      description: Authenticates user credentials and returns JWT token
+      description: Authenticates user credentials and returns JWT token (requires verified email)
       requestBody:
         required: true
         content:
@@ -281,10 +339,52 @@ paths:
           description: User not found
 `;
 
-export const openApiSpecJson = YAML.parse(openApiSpecYaml);
+export const openApiSpecBase = YAML.parse(openApiSpecYaml);
+
+export function getDynamicOpenApiSpec(origin?: string) {
+  const currentOrigin = origin || "http://localhost:3000";
+  const isLocal = currentOrigin.includes("localhost") || currentOrigin.includes("127.0.0.1");
+
+  const servers = [
+    {
+      url: currentOrigin,
+      description: isLocal
+        ? `Current local development server`
+        : "Current environment server",
+    },
+  ];
+
+  if (isLocal) {
+    servers.push({
+      url: "https://job-hunter-server-dev.jobhunterserver.workers.dev",
+      description: "Cloudflare Workers production",
+    });
+  }
+
+  return {
+    ...openApiSpecBase,
+    servers,
+  };
+}
+
+export const openApiSpecJson = getDynamicOpenApiSpec();
+
+function extractOrigin(c: any): string {
+  try {
+    const url = new URL(c.req.url);
+    return url.origin;
+  } catch {
+    const host = c.req.header("host") || `localhost:${c.env?.PORT || (typeof process !== "undefined" && process.env?.PORT) || 3000}`;
+    const proto = c.req.header("x-forwarded-proto") || (host.includes("localhost") ? "http" : "https");
+    return `${proto}://${host}`;
+  }
+}
 
 // GET /docs - Interactive ReDoc Documentation
 docs.get("/", (c) => {
+  const origin = extractOrigin(c);
+  const spec = getDynamicOpenApiSpec(origin);
+
   const html = `<!DOCTYPE html>
 <html>
   <head>
@@ -296,7 +396,7 @@ docs.get("/", (c) => {
   </head>
   <body>
     <div id="redoc-container"></div>
-    <script id="spec-data" type="application/json">${JSON.stringify(openApiSpecJson)}</script>
+    <script id="spec-data" type="application/json">${JSON.stringify(spec)}</script>
     <script src="https://cdn.redoc.ly/redoc/latest/bundles/redoc.standalone.js"></script>
     <script>
       const specElement = document.getElementById("spec-data");
@@ -318,14 +418,18 @@ docs.get("/", (c) => {
 
 // GET /docs/spec.yaml - Raw OpenAPI YAML
 docs.get("/spec.yaml", (c) => {
-  return c.text(openApiSpecYaml, 200, {
+  const origin = extractOrigin(c);
+  const spec = getDynamicOpenApiSpec(origin);
+  return c.text(YAML.stringify(spec), 200, {
     "Content-Type": "text/yaml; charset=utf-8",
   });
 });
 
 // GET /docs/spec.json - Raw OpenAPI JSON
 docs.get("/spec.json", (c) => {
-  return c.json(openApiSpecJson);
+  const origin = extractOrigin(c);
+  const spec = getDynamicOpenApiSpec(origin);
+  return c.json(spec);
 });
 
 export default docs;
